@@ -325,6 +325,11 @@ function ber.new_encoder()
     end
 
     --- 编码 BOOLEAN 类型
+    -- 将布尔值编码为 BER BOOLEAN 类型
+    -- @param val boolean 要编码的布尔值
+    -- @usage
+    -- enc:encode_boolean(true)
+    -- enc:encode_boolean(false)
     function enc:encode_boolean(val)
         self:encode_tag(ber.CLASS_UNIVERSAL, ber.PRIMITIVE, ber.BOOLEAN)
         self:_encode_length(1)
@@ -332,6 +337,11 @@ function ber.new_encoder()
     end
 
     --- 编码 BIT STRING 类型
+    -- 将位串编码为 BER BIT STRING 类型
+    -- @param data string 位串数据
+    -- @param unused_bits number 最后一个字节中未使用的位数 (0-7)，默认为0
+    -- @usage
+    -- enc:encode_bit_string("\xF0", 4)  -- 编码 1111 (后4位未使用)
     function enc:encode_bit_string(data, unused_bits)
         self:encode_tag(ber.CLASS_UNIVERSAL, ber.PRIMITIVE, ber.BIT_STRING)
         self:_encode_length(#data + 1)
@@ -340,6 +350,10 @@ function ber.new_encoder()
     end
 
     --- 编码 UTF8 STRING 类型
+    -- 将 UTF-8 字符串编码为 BER UTF8String 类型
+    -- @param str string UTF-8 编码的字符串
+    -- @usage
+    -- enc:encode_utf8_string("你好世界")
     function enc:encode_utf8_string(str)
         self:encode_tag(ber.CLASS_UNIVERSAL, ber.PRIMITIVE, ber.UTF8_STRING)
         self:_encode_length(#str)
@@ -347,6 +361,11 @@ function ber.new_encoder()
     end
 
     --- 编码 PrintableString 类型
+    -- 将可打印字符串编码为 BER PrintableString 类型
+    -- PrintableString 只能包含字母、数字和部分标点符号
+    -- @param str string 可打印字符串
+    -- @usage
+    -- enc:encode_printable_string("Hello World")
     function enc:encode_printable_string(str)
         self:encode_tag(ber.CLASS_UNIVERSAL, ber.PRIMITIVE, ber.PRINTABLE_STRING)
         self:_encode_length(#str)
@@ -354,6 +373,11 @@ function ber.new_encoder()
     end
 
     --- 编码 IA5String 类型
+    -- 将 IA5 字符串编码为 BER IA5String 类型
+    -- IA5String 等同于 ASCII 字符串
+    -- @param str string IA5/ASCII 字符串
+    -- @usage
+    -- enc:encode_ia5_string("test@example.com")
     function enc:encode_ia5_string(str)
         self:encode_tag(ber.CLASS_UNIVERSAL, ber.PRIMITIVE, ber.IA5_STRING)
         self:_encode_length(#str)
@@ -361,6 +385,10 @@ function ber.new_encoder()
     end
 
     --- 编码 UTC TIME 类型
+    -- 将 UTC 时间编码为 BER UTCTime 类型
+    -- @param str string UTC 时间字符串，格式为 YYMMDDhhmmssZ
+    -- @usage
+    -- enc:encode_utc_time("231231235959Z")  -- 2023年12月31日 23:59:59 UTC
     function enc:encode_utc_time(str)
         self:encode_tag(ber.CLASS_UNIVERSAL, ber.PRIMITIVE, ber.UTC_TIME)
         self:_encode_length(#str)
@@ -368,16 +396,33 @@ function ber.new_encoder()
     end
 
     --- 编码 GeneralizedTime 类型
+    -- 将通用时间编码为 BER GeneralizedTime 类型
+    -- @param str string 通用时间字符串，格式为 YYYYMMDDhhmmssZ
+    -- @usage
+    -- enc:encode_generalized_time("20231231235959Z")  -- 2023年12月31日 23:59:59 UTC
     function enc:encode_generalized_time(str)
         self:encode_tag(ber.CLASS_UNIVERSAL, ber.PRIMITIVE, ber.GENERALIZED_TIME)
         self:_encode_length(#str)
         self.buf:put(str)
     end
 
-    --- 编码 SET 类型
+    --- 开始 SET 编码
+    -- 开始一个构造集合，返回新的 BER 编码器
+    -- @return encoder 用于编码子集合的编码器
+    -- @usage
+    -- local set = enc:start_set()
+    -- set:encode_integer(1)
+    -- set:encode_utf8_string("test")
+    -- enc:end_set(set)
     function enc:start_set()
         return ber.new_encoder()
     end
+    
+    --- 结束 SET 编码
+    -- 完成集合编码，将子编码器的内容写入当前编码器
+    -- @param set_enc encoder start_set 返回的编码器实例
+    -- @usage
+    -- enc:end_set(set)
     function enc:end_set(set_enc)
         local content = set_enc:get()
         self:encode_tag(ber.CLASS_UNIVERSAL, ber.CONSTRUCTED, 17)
@@ -686,6 +731,10 @@ function ber.new_decoder(data)
     end
 
     --- 解码 BOOLEAN 类型
+    -- 从 BER 数据中解码布尔值
+    -- @return boolean 解码后的布尔值
+    -- @usage
+    -- local value = dec:decode_boolean()
     function dec:decode_boolean()
         local tag_info = self:decode_tag()
         if tag_info.tag ~= ber.BOOLEAN then error("BER decode: expected BOOLEAN tag") end
@@ -696,6 +745,11 @@ function ber.new_decoder(data)
     end
 
     --- 解码 BIT STRING 类型
+    -- 从 BER 数据中解码位串
+    -- @return string 位串数据
+    -- @return number 最后一个字节中未使用的位数 (0-7)
+    -- @usage
+    -- local data, unused_bits = dec:decode_bit_string()
     function dec:decode_bit_string()
         local tag_info = self:decode_tag()
         if tag_info.tag ~= ber.BIT_STRING then error("BER decode: expected BIT_STRING tag") end
@@ -706,6 +760,10 @@ function ber.new_decoder(data)
     end
 
     --- 解码 UTF8 STRING 类型
+    -- 从 BER 数据中解码 UTF-8 字符串
+    -- @return string UTF-8 编码的字符串
+    -- @usage
+    -- local str = dec:decode_utf8_string()
     function dec:decode_utf8_string()
         local tag_info = self:decode_tag()
         if tag_info.tag ~= ber.UTF8_STRING then error("BER decode: expected UTF8_STRING tag") end
@@ -714,6 +772,10 @@ function ber.new_decoder(data)
     end
 
     --- 解码 PrintableString 类型
+    -- 从 BER 数据中解码可打印字符串
+    -- @return string 可打印字符串
+    -- @usage
+    -- local str = dec:decode_printable_string()
     function dec:decode_printable_string()
         local tag_info = self:decode_tag()
         if tag_info.tag ~= ber.PRINTABLE_STRING then error("BER decode: expected PRINTABLE_STRING tag") end
@@ -722,6 +784,10 @@ function ber.new_decoder(data)
     end
 
     --- 解码 IA5String 类型
+    -- 从 BER 数据中解码 IA5/ASCII 字符串
+    -- @return string IA5 字符串
+    -- @usage
+    -- local str = dec:decode_ia5_string()
     function dec:decode_ia5_string()
         local tag_info = self:decode_tag()
         if tag_info.tag ~= ber.IA5_STRING then error("BER decode: expected IA5_STRING tag") end
@@ -730,6 +796,10 @@ function ber.new_decoder(data)
     end
 
     --- 解码 UTC TIME 类型
+    -- 从 BER 数据中解码 UTC 时间
+    -- @return string UTC 时间字符串，格式为 YYMMDDhhmmssZ
+    -- @usage
+    -- local time = dec:decode_utc_time()
     function dec:decode_utc_time()
         local tag_info = self:decode_tag()
         if tag_info.tag ~= ber.UTC_TIME then error("BER decode: expected UTC_TIME tag") end
@@ -738,6 +808,10 @@ function ber.new_decoder(data)
     end
 
     --- 解码 GeneralizedTime 类型
+    -- 从 BER 数据中解码通用时间
+    -- @return string 通用时间字符串，格式为 YYYYMMDDhhmmssZ
+    -- @usage
+    -- local time = dec:decode_generalized_time()
     function dec:decode_generalized_time()
         local tag_info = self:decode_tag()
         if tag_info.tag ~= ber.GENERALIZED_TIME then error("BER decode: expected GENERALIZED_TIME tag") end
@@ -745,7 +819,14 @@ function ber.new_decoder(data)
         return self:_read_bytes(len)
     end
 
-    --- 解码 SET 类型
+    --- 开始 SET 解码
+    -- 开始解码一个构造集合，返回集合结束位置
+    -- @return number 集合结束位置，用于 at_sequence_end 检查
+    -- @usage
+    -- local end_pos = dec:start_set()
+    -- while not dec:at_sequence_end(end_pos) do
+    --     -- 解码集合元素...
+    -- end
     function dec:start_set()
         local tag_info = self:decode_tag()
         if tag_info.tag ~= 17 or tag_info.constructed == 0 then
