@@ -67,6 +67,30 @@ snmp.BAD_VALUE = 3
 snmp.READ_ONLY = 4
 snmp.GEN_ERR = 5
 
+--- 辅助函数：将 32 位整数编码为 4 字节大端序
+-- @param value number 32位整数值
+-- @return string 4字节的大端序表示
+local function encode_uint32(value)
+    local bytes = {}
+    local v = value
+    for i = 1, 4 do
+        table.insert(bytes, 1, string.char(v % 256))
+        v = math.floor(v / 256)
+    end
+    return table.concat(bytes)
+end
+
+--- 辅助函数：从字节序列解码 32 位大端序整数
+-- @param bytes string 字节序列
+-- @return number 解码后的整数
+local function decode_uint32(bytes)
+    local value = 0
+    for i = 1, #bytes do
+        value = value * 256 + bytes:byte(i)
+    end
+    return value
+end
+
 --- 编码 SNMP GetRequest PDU
 -- 创建一个 SNMP GetRequest 消息，用于查询 SNMP 代理的变量值
 -- @param version number SNMP 版本 (使用 snmp.VERSION_* 常量)
@@ -200,24 +224,10 @@ function snmp.encode_set_request(version, community, request_id, varbinds)
             vb_seq:encode_oid(value)
         elseif value_type == "counter32" then
             -- Counter32 是应用类型 [APPLICATION 1]
-            local bytes = {}
-            local v = value
-            for i = 1, 4 do
-                table.insert(bytes, 1, string.char(v % 256))
-                v = math.floor(v / 256)
-            end
-            local counter_data = table.concat(bytes)
-            vb_seq:encode_with_tag(ber.CLASS_APPLICATION, ber.PRIMITIVE, 1, counter_data)
+            vb_seq:encode_with_tag(ber.CLASS_APPLICATION, ber.PRIMITIVE, 1, encode_uint32(value))
         elseif value_type == "timeticks" then
             -- TimeTicks 是应用类型 [APPLICATION 3]
-            local bytes = {}
-            local v = value
-            for i = 1, 4 do
-                table.insert(bytes, 1, string.char(v % 256))
-                v = math.floor(v / 256)
-            end
-            local ticks_data = table.concat(bytes)
-            vb_seq:encode_with_tag(ber.CLASS_APPLICATION, ber.PRIMITIVE, 3, ticks_data)
+            vb_seq:encode_with_tag(ber.CLASS_APPLICATION, ber.PRIMITIVE, 3, encode_uint32(value))
         else
             error("encode_set_request: Unsupported value type '" .. tostring(value_type) .. "'. Supported types: integer, string, oid, counter32, timeticks")
         end
@@ -303,37 +313,28 @@ function snmp.decode_message(data)
             -- Counter32
             dec:decode_tag()
             local len = dec:decode_length()
-            local bytes = dec:_read_bytes(len)
-            value = 0
-            for i = 1, #bytes do
-                value = value * 256 + bytes:byte(i)
-            end
+            local bytes = dec:read_raw_bytes(len)
+            value = decode_uint32(bytes)
             value_type = "counter32"
         elseif value_tag.tag == 2 and value_tag.class == ber.CLASS_APPLICATION then
             -- Gauge32
             dec:decode_tag()
             local len = dec:decode_length()
-            local bytes = dec:_read_bytes(len)
-            value = 0
-            for i = 1, #bytes do
-                value = value * 256 + bytes:byte(i)
-            end
+            local bytes = dec:read_raw_bytes(len)
+            value = decode_uint32(bytes)
             value_type = "gauge32"
         elseif value_tag.tag == 3 and value_tag.class == ber.CLASS_APPLICATION then
             -- TimeTicks
             dec:decode_tag()
             local len = dec:decode_length()
-            local bytes = dec:_read_bytes(len)
-            value = 0
-            for i = 1, #bytes do
-                value = value * 256 + bytes:byte(i)
-            end
+            local bytes = dec:read_raw_bytes(len)
+            value = decode_uint32(bytes)
             value_type = "timeticks"
         elseif value_tag.tag == 0 and value_tag.class == ber.CLASS_APPLICATION then
             -- IpAddress
             dec:decode_tag()
             local len = dec:decode_length()
-            local bytes = dec:_read_bytes(len)
+            local bytes = dec:read_raw_bytes(len)
             value = {}
             for i = 1, #bytes do
                 table.insert(value, bytes:byte(i))
@@ -344,7 +345,7 @@ function snmp.decode_message(data)
             dec:decode_tag()
             local len = dec:decode_length()
             if len > 0 then
-                dec:_read_bytes(len)
+                dec:read_raw_bytes(len)
             end
             value = nil
             value_type = "unknown"

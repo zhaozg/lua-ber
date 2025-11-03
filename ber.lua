@@ -744,6 +744,16 @@ function ber.new_decoder(data)
     function dec:remaining()
         return #self.buf - self.pos + 1
     end
+    
+    --- 读取原始字节数据
+    -- 从当前位置读取指定长度的字节，不做任何解码
+    -- @param len number 要读取的字节数
+    -- @return string 读取的原始字节数据
+    -- @usage
+    -- local raw_data = dec:read_raw_bytes(4)
+    function dec:read_raw_bytes(len)
+        return self:_read_bytes(len)
+    end
 
     --- 解码 BOOLEAN 类型
     -- 从 BER 数据中解码布尔值
