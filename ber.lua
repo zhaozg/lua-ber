@@ -2,6 +2,7 @@
 
 local bit = require('bit')
 local buffer = require('string.buffer')
+local oid = require('oid')
 
 --- BER (Basic Encoding Rules) 编码/解码库
 -- 实现 ASN.1 BER 编码规则，支持高性能的二进制数据编码和解码
@@ -210,53 +211,17 @@ function ber.new_encoder()
     end
 
     --- 编码对象标识符 (OID)
-    -- 实现 OID 的 BER 编码算法，将点分OID转换为压缩的VLQ格式
-    -- @param oid table OID组件数组，如 {1, 3, 6, 1, 4, 1}
+    -- 实现 OID 的 BER 编码算法，使用 oid 库进行编码
+    -- @param oid_components table OID组件数组，如 {1, 3, 6, 1, 4, 1}
     -- @usage
     -- enc:encode_oid({1, 3, 6, 1, 4, 1})  -- 编码 1.3.6.1.4.1
-    function enc:encode_oid(oid)
+    function enc:encode_oid(oid_components)
         self:encode_tag(ber.CLASS_UNIVERSAL, ber.PRIMITIVE, ber.OBJECT_IDENTIFIER)
-
-        if #oid < 2 then
-            error("OID must have at least two components")
-        end
-
-        -- 编码前两个组件：X * 40 + Y
-        local first = oid[1] * 40 + oid[2]
-        local oid_data = buffer.new()
-
-        -- 编码第一个字节
-        if first > 127 then
-            oid_data:put(string.char(bit.bor(0x80, bit.rshift(first, 7))))
-        end
-        oid_data:put(string.char(bit.band(first, 0x7F)))
-
-        -- 编码剩余组件
-        for i = 3, #oid do
-            local comp = oid[i]
-            if comp < 0 then
-                error("OID components cannot be negative")
-            end
-
-            local comp_bytes = {}
-            while comp > 0 do
-                table.insert(comp_bytes, 1, bit.bor(bit.band(comp, 0x7F), 0x80))
-                comp = bit.rshift(comp, 7)
-            end
-
-            if #comp_bytes == 0 then
-                table.insert(comp_bytes, 0)
-            else
-                comp_bytes[#comp_bytes] = bit.band(comp_bytes[#comp_bytes], 0x7F)
-            end
-
-            for _, byte in ipairs(comp_bytes) do
-                oid_data:put(string.char(byte))
-            end
-        end
-
-        self:_encode_length(#oid_data)
-        self.buf:put(tostring(oid_data))
+        
+        -- 使用 oid 库进行内容编码
+        local oid_content = oid.encode_content(oid_components)
+        self:_encode_length(#oid_content)
+        self.buf:put(oid_content)
     end
 
     --- 开始序列编码
@@ -644,7 +609,7 @@ function ber.new_decoder(data)
     end
 
     --- 解码对象标识符 (OID)
-    -- 实现 OID 的 BER 解码算法，将压缩的VLQ格式转换为点分OID
+    -- 实现 OID 的 BER 解码算法，使用 oid 库进行解码
     -- @return table OID组件数组
     -- @usage
     -- local oid = dec:decode_oid()
@@ -661,39 +626,9 @@ function ber.new_decoder(data)
         end
 
         local data = self:_read_bytes(len)
-        local oid = {}
-        local pos = 1
-        local bufstr = data
-        -- 解码第一个字节（包含前两个组件）
-        if pos > #bufstr then
-            error("BER decode: incomplete OID data")
-        end
-
-        local first_byte = bufstr:byte(pos)
-        pos = pos + 1
-
-        -- 第一个字节包含两个组件：X = first_byte / 40, Y = first_byte % 40
-        table.insert(oid, math.floor(first_byte / 40))
-        table.insert(oid, first_byte % 40)
-
-        -- 解码剩余组件
-        while pos <= #bufstr do
-            local value = 0
-            local byte
-
-            repeat
-                if pos > #bufstr then
-                    error("BER decode: incomplete OID component")
-                end
-                byte = bufstr:byte(pos)
-                pos = pos + 1
-                value = bit.bor(bit.lshift(value, 7), bit.band(byte, 0x7F))
-            until bit.band(byte, 0x80) == 0
-
-            table.insert(oid, value)
-        end
-
-        return oid
+        
+        -- 使用 oid 库进行内容解码
+        return oid.decode_content(data)
     end
 
     --- 开始序列解码

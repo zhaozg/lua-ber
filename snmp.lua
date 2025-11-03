@@ -7,6 +7,7 @@
 -- @license MIT
 
 local ber = require('ber')
+local oid = require('oid')
 
 local snmp = {}
 
@@ -422,21 +423,17 @@ function snmp.encode_get_response(version, community, request_id, error_status, 
 end
 
 --- 格式化 OID 为点分字符串
--- @param oid table OID 数组
+-- @param oid_components table OID 数组
 -- @return string 点分格式的 OID 字符串
-function snmp.format_oid(oid)
-    return table.concat(oid, ".")
+function snmp.format_oid(oid_components)
+    return oid.format(oid_components)
 end
 
 --- 解析点分 OID 字符串为数组
 -- @param oid_str string 点分格式的 OID 字符串
 -- @return table OID 数组
 function snmp.parse_oid(oid_str)
-    local oid = {}
-    for num in oid_str:gmatch("(%d+)") do
-        table.insert(oid, tonumber(num))
-    end
-    return oid
+    return oid.parse(oid_str)
 end
 
 return snmp
