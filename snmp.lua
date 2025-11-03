@@ -92,9 +92,6 @@ function snmp.encode_get_request(version, community, request_id, oids)
     msg_seq:encode_octet_string(community)
     
     -- PDU ::= GetRequest-PDU
-    local pdu_enc = ber.new_encoder()
-    pdu_enc:encode_tag(ber.CLASS_CONTEXT, ber.CONSTRUCTED, 0)  -- GetRequest tag
-    
     local pdu_seq = ber.new_encoder()
     
     -- Request ID
@@ -116,12 +113,9 @@ function snmp.encode_get_request(version, community, request_id, oids)
     end
     pdu_seq:end_sequence(varbind_seq)
     
-    -- 完成 PDU 编码
+    -- 完成 PDU 编码并封装为 GetRequest 标签
     local pdu_content = pdu_seq:get()
-    pdu_enc:_encode_length(#pdu_content)
-    pdu_enc.buf:put(pdu_content)
-    
-    msg_seq.buf:put(pdu_enc:get())
+    msg_seq:encode_with_tag(ber.CLASS_CONTEXT, ber.CONSTRUCTED, 0, pdu_content)  -- GetRequest tag
     
     enc:end_sequence(msg_seq)
     
@@ -146,9 +140,6 @@ function snmp.encode_get_next_request(version, community, request_id, oids)
     msg_seq:encode_integer(version)
     msg_seq:encode_octet_string(community)
     
-    local pdu_enc = ber.new_encoder()
-    pdu_enc:encode_tag(ber.CLASS_CONTEXT, ber.CONSTRUCTED, 1)  -- GetNextRequest tag
-    
     local pdu_seq = ber.new_encoder()
     pdu_seq:encode_integer(request_id)
     pdu_seq:encode_integer(snmp.NO_ERROR)
@@ -164,10 +155,7 @@ function snmp.encode_get_next_request(version, community, request_id, oids)
     pdu_seq:end_sequence(varbind_seq)
     
     local pdu_content = pdu_seq:get()
-    pdu_enc:_encode_length(#pdu_content)
-    pdu_enc.buf:put(pdu_content)
-    
-    msg_seq.buf:put(pdu_enc:get())
+    msg_seq:encode_with_tag(ber.CLASS_CONTEXT, ber.CONSTRUCTED, 1, pdu_content)  -- GetNextRequest tag
     enc:end_sequence(msg_seq)
     
     return enc:get()
@@ -192,9 +180,6 @@ function snmp.encode_set_request(version, community, request_id, varbinds)
     msg_seq:encode_integer(version)
     msg_seq:encode_octet_string(community)
     
-    local pdu_enc = ber.new_encoder()
-    pdu_enc:encode_tag(ber.CLASS_CONTEXT, ber.CONSTRUCTED, 3)  -- SetRequest tag
-    
     local pdu_seq = ber.new_encoder()
     pdu_seq:encode_integer(request_id)
     pdu_seq:encode_integer(snmp.NO_ERROR)
@@ -215,32 +200,26 @@ function snmp.encode_set_request(version, community, request_id, varbinds)
             vb_seq:encode_oid(value)
         elseif value_type == "counter32" then
             -- Counter32 是应用类型 [APPLICATION 1]
-            local val_enc = ber.new_encoder()
-            val_enc:encode_tag(ber.CLASS_APPLICATION, ber.PRIMITIVE, 1)
-            val_enc:_encode_length(4)
             local bytes = {}
             local v = value
             for i = 1, 4 do
                 table.insert(bytes, 1, string.char(v % 256))
                 v = math.floor(v / 256)
             end
-            val_enc.buf:put(table.concat(bytes))
-            vb_seq.buf:put(val_enc:get())
+            local counter_data = table.concat(bytes)
+            vb_seq:encode_with_tag(ber.CLASS_APPLICATION, ber.PRIMITIVE, 1, counter_data)
         elseif value_type == "timeticks" then
             -- TimeTicks 是应用类型 [APPLICATION 3]
-            local val_enc = ber.new_encoder()
-            val_enc:encode_tag(ber.CLASS_APPLICATION, ber.PRIMITIVE, 3)
-            val_enc:_encode_length(4)
             local bytes = {}
             local v = value
             for i = 1, 4 do
                 table.insert(bytes, 1, string.char(v % 256))
                 v = math.floor(v / 256)
             end
-            val_enc.buf:put(table.concat(bytes))
-            vb_seq.buf:put(val_enc:get())
+            local ticks_data = table.concat(bytes)
+            vb_seq:encode_with_tag(ber.CLASS_APPLICATION, ber.PRIMITIVE, 3, ticks_data)
         else
-            error("Unsupported value type: " .. tostring(value_type))
+            error("encode_set_request: Unsupported value type '" .. tostring(value_type) .. "'. Supported types: integer, string, oid, counter32, timeticks")
         end
         
         varbind_seq:end_sequence(vb_seq)
@@ -248,10 +227,7 @@ function snmp.encode_set_request(version, community, request_id, varbinds)
     pdu_seq:end_sequence(varbind_seq)
     
     local pdu_content = pdu_seq:get()
-    pdu_enc:_encode_length(#pdu_content)
-    pdu_enc.buf:put(pdu_content)
-    
-    msg_seq.buf:put(pdu_enc:get())
+    msg_seq:encode_with_tag(ber.CLASS_CONTEXT, ber.CONSTRUCTED, 3, pdu_content)  -- SetRequest tag
     enc:end_sequence(msg_seq)
     
     return enc:get()
@@ -410,9 +386,6 @@ function snmp.encode_get_response(version, community, request_id, error_status, 
     msg_seq:encode_integer(version)
     msg_seq:encode_octet_string(community)
     
-    local pdu_enc = ber.new_encoder()
-    pdu_enc:encode_tag(ber.CLASS_CONTEXT, ber.CONSTRUCTED, 2)  -- GetResponse tag
-    
     local pdu_seq = ber.new_encoder()
     pdu_seq:encode_integer(request_id)
     pdu_seq:encode_integer(error_status)
@@ -433,7 +406,7 @@ function snmp.encode_get_response(version, community, request_id, error_status, 
         elseif value_type == "null" then
             vb_seq:encode_null()
         else
-            error("Unsupported value type: " .. tostring(value_type))
+            error("encode_get_response: Unsupported value type '" .. tostring(value_type) .. "'. Supported types: integer, string, oid, null")
         end
         
         varbind_seq:end_sequence(vb_seq)
@@ -441,10 +414,7 @@ function snmp.encode_get_response(version, community, request_id, error_status, 
     pdu_seq:end_sequence(varbind_seq)
     
     local pdu_content = pdu_seq:get()
-    pdu_enc:_encode_length(#pdu_content)
-    pdu_enc.buf:put(pdu_content)
-    
-    msg_seq.buf:put(pdu_enc:get())
+    msg_seq:encode_with_tag(ber.CLASS_CONTEXT, ber.CONSTRUCTED, 2, pdu_content)  -- GetResponse tag
     enc:end_sequence(msg_seq)
     
     return enc:get()
