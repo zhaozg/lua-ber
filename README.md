@@ -1,5 +1,15 @@
 # Lua-BER 编码/解码库
 
+一个高效的 BER (Basic Encoding Rules) 编码/解码库，使用 LuaJIT 的 string.buffer 实现高性能二进制数据处理。
+
+## 特性
+
+- ✅ 使用 LuaJIT 的 `string.buffer` 实现高性能编码
+- ✅ 完整的 LDoc 注释文档
+- ✅ 支持所有常用 ASN.1 类型
+- ✅ 包含 SNMP 协议支持
+- ✅ 全面的测试覆盖
+
 ## 支持的 ASN.1 基本类型与用法示例
 
 
@@ -137,3 +147,135 @@ end
 - 这种接口风格在业界 ASN.1/BER 库中较为常见，兼顾了灵活性和性能。
 
 如需更高级的结构化编码接口，可自行封装或联系作者协助扩展。
+
+---
+
+## SNMP 协议支持
+
+本库包含了一个完整的 SNMP (Simple Network Management Protocol) 实现，支持 SNMPv1/v2c 消息的编码和解码。
+
+### SNMP 功能特性
+
+- ✅ 支持 GetRequest、GetNextRequest、SetRequest、GetResponse PDU
+- ✅ 支持所有标准 SNMP 数据类型（Integer、String、OID、Counter32、TimeTicks 等）
+- ✅ 完整的错误处理
+- ✅ OID 字符串格式化和解析工具
+- ✅ 详细的使用示例和测试
+
+### SNMP 快速开始
+
+#### 创建 SNMP GetRequest
+
+```lua
+local snmp = require('snmp')
+
+-- 创建一个 GetRequest 查询系统信息
+local request = snmp.encode_get_request(
+    snmp.VERSION_2C,     -- SNMP v2c
+    "public",            -- 团体字符串
+    12345,               -- 请求 ID
+    {
+        {1, 3, 6, 1, 2, 1, 1, 1, 0},  -- sysDescr.0
+        {1, 3, 6, 1, 2, 1, 1, 5, 0}   -- sysName.0
+    }
+)
+
+-- request 现在包含可以发送到 SNMP 代理的 BER 编码数据
+-- 通过 UDP socket 发送: sock:sendto(request, agent_ip, 161)
+```
+
+#### 解析 SNMP 响应
+
+```lua
+-- 从网络接收到响应数据后
+local response = snmp.decode_message(response_data)
+
+print("SNMP 版本:", response.version)
+print("团体字符串:", response.community)
+print("请求 ID:", response.request_id)
+print("错误状态:", response.error_status)
+
+-- 遍历变量绑定
+for i, vb in ipairs(response.varbinds) do
+    print("OID:", snmp.format_oid(vb.oid))
+    print("类型:", vb.type)
+    print("值:", vb.value)
+end
+```
+
+#### 创建 SNMP SetRequest
+
+```lua
+local set_request = snmp.encode_set_request(
+    snmp.VERSION_2C,
+    "private",
+    12346,
+    {
+        {{1, 3, 6, 1, 2, 1, 1, 5, 0}, "string", "new-hostname"},
+        {{1, 3, 6, 1, 2, 1, 1, 6, 0}, "string", "Server Room A"}
+    }
+)
+```
+
+### SNMP 常用 OID
+
+| OID | 名称 | 描述 |
+|-----|------|------|
+| 1.3.6.1.2.1.1.1.0 | sysDescr | 系统描述 |
+| 1.3.6.1.2.1.1.2.0 | sysObjectID | 系统对象标识符 |
+| 1.3.6.1.2.1.1.3.0 | sysUpTime | 系统运行时间 |
+| 1.3.6.1.2.1.1.4.0 | sysContact | 系统联系人 |
+| 1.3.6.1.2.1.1.5.0 | sysName | 系统名称 |
+| 1.3.6.1.2.1.1.6.0 | sysLocation | 系统位置 |
+
+### SNMP 示例文件
+
+运行示例查看更多用法：
+
+```bash
+luajit snmp_examples.lua   # SNMP 使用示例
+luajit test_snmp.lua       # SNMP 测试
+```
+
+---
+
+## 测试
+
+运行所有测试：
+
+```bash
+luajit test.lua        # BER 编码/解码测试
+luajit test_snmp.lua   # SNMP 协议测试
+```
+
+---
+
+## 性能优化
+
+本库使用 LuaJIT 的 `string.buffer` 来实现高性能的二进制数据编码和解码：
+
+- **编码器**：使用 `string.buffer` 增量构建 BER 数据，避免字符串拼接开销
+- **解码器**：使用 `string.buffer` 存储输入数据，通过位置游标高效读取
+- **零拷贝**：OID 和长度编码使用优化的位操作
+
+---
+
+## 代码质量
+
+- ✅ 完整的 LDoc 文档注释
+- ✅ 详细的参数和返回值说明
+- ✅ 丰富的使用示例
+- ✅ 全面的单元测试
+- ✅ 错误处理和边界情况覆盖
+
+---
+
+## 许可证
+
+MIT License
+
+---
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
