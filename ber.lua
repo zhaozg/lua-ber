@@ -429,6 +429,21 @@ function ber.new_encoder()
         self:_encode_length(#content)
         self.buf:put(content)
     end
+    
+    --- 编码带自定义标签的数据
+    -- 用于编码 SNMP 等协议中的应用特定或上下文特定类型
+    -- @param class number 标签类 (使用 ber.CLASS_* 常量)
+    -- @param constructed number 构造标记 (ber.PRIMITIVE 或 ber.CONSTRUCTED)
+    -- @param tag_number number 标签编号
+    -- @param content string 要编码的内容数据
+    -- @usage
+    -- enc:encode_with_tag(ber.CLASS_CONTEXT, ber.CONSTRUCTED, 0, pdu_content)
+    function enc:encode_with_tag(class, constructed, tag_number, content)
+        self:encode_tag(class, constructed, tag_number)
+        self:_encode_length(#content)
+        self.buf:put(content)
+    end
+    
     return enc
 end
 
