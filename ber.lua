@@ -132,6 +132,7 @@ function ber.new_encoder()
 
     --- 编码整数类型
     -- 实现 BER 整数编码，支持正负整数和补码表示
+    -- 性能优化：对小整数使用快速路径
     -- @param value number 要编码的整数值
     -- @usage
     -- enc:encode_integer(42)
@@ -143,6 +144,19 @@ function ber.new_encoder()
             -- 特殊处理零值
             self.buf:put(string.char(1)):put(string.char(0))
             return
+        end
+
+        -- 性能优化：小整数的快速路径 (-127 到 127)
+        if value >= -127 and value <= 127 then
+            if value > 0 and value < 128 then
+                -- 正数，单字节
+                self.buf:put(string.char(1)):put(string.char(value))
+                return
+            elseif value < 0 and value >= -128 then
+                -- 负数，单字节补码
+                self.buf:put(string.char(1)):put(string.char(256 + value))
+                return
+            end
         end
 
         local bytes = {}
@@ -423,33 +437,37 @@ end
 function ber.new_decoder(data)
     local dec = {
         buf = buffer.new(),
-        pos = 1
+        pos = 1,
+        _bufstr = nil  -- 缓存的字符串表示，用于性能优化
     }
     dec.buf:put(data)
+    dec._bufstr = tostring(dec.buf)  -- 预先缓存字符串
 
     --- 内部方法：读取单个字节
+    -- 性能优化：使用缓存的字符串
     -- @return number 读取的字节值
     -- @private
     function dec:_read_byte()
-        if self.pos > #self.buf then
-            error("BER decode: unexpected end of data (buffer overrun)")
+        if self.pos > #self._bufstr then
+            error(string.format("BER decode: unexpected end of data at position %d (buffer size: %d)", 
+                self.pos, #self._bufstr))
         end
-        local bufstr = tostring(self.buf)
-        local byte = bufstr:byte(self.pos)
+        local byte = self._bufstr:byte(self.pos)
         self.pos = self.pos + 1
         return byte
     end
 
     --- 内部方法：读取指定长度的字节序列
+    -- 性能优化：使用缓存的字符串
     -- @param len number 要读取的字节数
     -- @return string 读取的字节数据
     -- @private
     function dec:_read_bytes(len)
-        if self.pos + len - 1 > #self.buf then
-            error("BER decode: unexpected end of data (buffer overrun)")
+        if self.pos + len - 1 > #self._bufstr then
+            error(string.format("BER decode: unexpected end of data at position %d, needed %d bytes (buffer size: %d)",
+                self.pos, len, #self._bufstr))
         end
-        local bufstr = tostring(self.buf)
-        local data = bufstr:sub(self.pos, self.pos + len - 1)
+        local data = self._bufstr:sub(self.pos, self.pos + len - 1)
         self.pos = self.pos + len
         return data
     end
@@ -795,6 +813,30 @@ function ber.new_decoder(data)
         local len = self:decode_length()
         return self.pos + len
     end
+    
+    --- 通用方法：解码任意 BER TLV (Tag-Length-Value)
+    -- 解码下一个 BER 元素，返回标签信息和内容
+    -- 用于实现自定义或扩展的 BER 类型
+    -- @return table 标签信息 {class, constructed, tag}
+    -- @return string 内容数据
+    -- @usage
+    -- local tag_info, content = dec:decode_tlv()
+    -- if tag_info.tag == custom_tag then
+    --     -- 处理自定义类型
+    -- end
+    function dec:decode_tlv()
+        local tag_info = self:decode_tag()
+        local len = self:decode_length()
+        local content = self:_read_bytes(len)
+        return tag_info, content
+    end
+    
+    --- 获取当前剩余数据
+    -- @return number 剩余字节数
+    function dec:remaining()
+        return #self._bufstr - self.pos + 1
+    end
+    
     return dec
 end
 
